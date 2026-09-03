@@ -1,0 +1,25 @@
+name = "mana-market"
+main = "worker/index.js"
+compatibility_date = "2026-06-01"
+
+# Static site: this one Worker serves everything. Requests are matched against
+# ./public first; anything that is not a file there (i.e. /api/*) falls through
+# to the fetch handler in worker/index.js. That assets-first-then-Worker order
+# is the default, so no extra routing keys are needed.
+#
+# Note: this was written without a Cloudflare account to deploy against, so if
+# `wrangler deploy` complains about a key here, this block is the place to look.
+# `binding = "ASSETS"` lets the Worker hand back index.html for unknown paths.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[kv_namespaces]]
+binding = "SUBS"
+id = "REPLACE_WITH_REAL_KV_NAMESPACE_ID"
+
+# Secrets (set via `wrangler secret put <NAME>`, never committed):
+#   ADMIN_TOKEN        - shared secret for X-Admin-Token (GET /api/subs, POST /api/sent)
+#   VAPID_PUBLIC_KEY    - served by GET /api/vapid; the private half lives ONLY
+#                         in GitHub Actions secrets (scripts/send-alerts.mjs),
+#                         never here.

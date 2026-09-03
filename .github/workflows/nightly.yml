@@ -1,0 +1,89 @@
+name: Nightly prices
+
+# Every night: pull today's prices from Scryfall's bulk file, rebuild the data
+# pack, commit the day's history, publish to GitHub Pages, push alerts.
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # commit history/<day>.csv
+  pages: write      # publish to GitHub Pages
+  id-token: write   # required by the Pages deploy action
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ingest today's Scryfall snapshot
+        run: npm run ingest
+
+      - name: Build the data pack
+        run: npm run pack
+
+      - name: Test
+        run: npm test
+
+      - name: Prune history older than 400 days
+        run: |
+          cutoff=$(date -u -d '400 days ago' +%Y-%m-%d)
+          for f in history/*.csv; do
+            day=$(basename "$f" .csv)
+            if [[ "$day" < "$cutoff" ]]; then git rm -q "$f"; fi
+          done
+
+      # Only the daily CSVs are committed (~150 KB/day). The pack is rebuilt on
+      # every run and uploaded straight to Pages, so committing it would only
+      # bloat the repo.
+      - name: Commit history
+        run: |
+          git config user.name 'mana-market-bot'
+          git config user.email 'mana-market-bot@users.noreply.github.com'
+          git add history/
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "chore: prices $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      # Phone alerts via ntfy.sh. Missing config just means no alerts yet, which
+      # must not fail the price update.
+      - name: Send alerts
+        continue-on-error: true
+        env:
+          SITE_URL: ${{ steps.deploy.outputs.page_url }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: npm run alerts

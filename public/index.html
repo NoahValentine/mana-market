@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mana Market — Magic card prices</title>
+<meta name="description" content="Track the most expensive Magic: The Gathering cards. TCGplayer market prices, cheapest and most expensive printings, 24h/7d/30d movers.">
+<meta name="theme-color" content="#12120f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://api.scryfall.com" crossorigin>
+<link rel="preconnect" href="https://cards.scryfall.io" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#/" aria-label="Mana Market home">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 15.5 10.5 9l3 4.2L16.8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-name">Mana<span class="brand-thin">Market</span></span>
+    </a>
+
+    <form class="quicksearch" role="search" data-quicksearch>
+      <label class="sr-only" for="qs">Search cards</label>
+      <input id="qs" type="search" placeholder="Search cards or Scryfall syntax" autocomplete="off" enterkeyhint="search" spellcheck="false">
+      <button type="submit" aria-label="Search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </form>
+
+    <div class="topbar-tools">
+      <div class="basis" role="group" aria-label="Price basis">
+        <button type="button" data-basis="lo" class="on" title="Show the cheapest printing of each card">Cheapest</button>
+        <button type="button" data-basis="hi" title="Show the most expensive printing of each card">Priciest</button>
+      </div>
+      <button type="button" class="icon-btn" data-theme-toggle aria-label="Switch theme">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Main">
+    <a href="#/" data-tab="market">Market</a>
+    <a href="#/trends" data-tab="trends">Trends</a>
+    <a href="#/search" data-tab="search">Search</a>
+    <a href="#/watchlist" data-tab="watchlist">Watchlist</a>
+    <a href="#/deck" data-tab="deck">Deck value</a>
+  </nav>
+</header>
+
+<main id="main" tabindex="-1"></main>
+
+<nav class="bottomnav" aria-label="Main">
+  <a href="#/" data-tab="market"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m5 10V5m5 14v-7m5 7V8" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg><span>Market</span></a>
+  <a href="#/trends" data-tab="trends"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l5-5 3.5 3.5L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12V7h-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Trends</span></a>
+  <a href="#/search" data-tab="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Search</span></a>
+  <a href="#/watchlist" data-tab="watchlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 4 2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Watch</span></a>
+  <a href="#/deck" data-tab="deck"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="11" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h9a2 2 0 0 0 2-2V7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Deck</span></a>
+</nav>
+
+<footer class="site-foot">
+  <p>Card data and images from <a href="https://scryfall.com" rel="noopener">Scryfall</a>. Prices are TCGplayer market prices and update once per day.</p>
+  <p class="fine">Mana Market is unofficial Fan Content permitted under the Wizards of the Coast Fan Content Policy. Not approved or endorsed by Wizards of the Coast or Scryfall. Portions of the materials used are property of Wizards of the Coast LLC.</p>
+  <p class="fine" data-datastamp></p>
+</footer>
+
+<div class="toasts" data-toasts aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

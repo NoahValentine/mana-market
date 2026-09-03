@@ -1,0 +1,7 @@
+node_modules/
+screenshots/
+.DS_Store
+*.log
+# Local scratch output from the ingest/pack scripts
+/tmp-*
+_to_delete/

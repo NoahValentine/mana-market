@@ -1,0 +1,52 @@
+name: Seed 90-day history from MTGJSON (manual)
+
+# One-time (or occasional) backfill of history/<day>.csv from MTGJSON's
+# AllPrices.json.gz + AllIdentifiers.json.gz. Manual-only: it downloads two
+# large files (AllPrices.json.gz is multiple hundred MB compressed, more
+# uncompressed) and can take 20-40 minutes. GitHub-hosted runners provide
+# ~14GB disk and ~7GB RAM, which comfortably fits this job -- see the
+# runtime/RAM comment at the top of scripts/seed-mtgjson.mjs for the
+# reasoning. Never overwrites an existing history/<day>.csv unless run with
+# force: true, so it's safe to re-run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Overwrite existing history/<day>.csv files'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run MTGJSON seed
+        run: node scripts/seed-mtgjson.mjs ${{ inputs.force && '--force' || '' }}
+
+      - name: Commit seeded history
+        run: |
+          git config user.name 'mana-market-bot'
+          git config user.email 'mana-market-bot@users.noreply.github.com'
+          git add history/
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "chore: seed history from MTGJSON"
+            git push
+          fi

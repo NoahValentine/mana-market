@@ -1,0 +1,22 @@
+{
+  "name": "Mana Market — Magic card prices",
+  "short_name": "Mana Market",
+  "description": "Track the most expensive Magic: The Gathering cards, with TCGplayer market prices, cheapest printings and daily movers.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#12120f",
+  "theme_color": "#12120f",
+  "orientation": "any",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Market trends", "url": "./#/trends" },
+    { "name": "Watchlist", "url": "./#/watchlist" },
+    { "name": "Deck value", "url": "./#/deck" }
+  ]
+}

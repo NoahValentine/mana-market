@@ -1,0 +1,2 @@
+{"endpoint":"https://push.example.com/ep/aaa111","keys":{"p256dh":"p1","auth":"a1"},"rules":[{"oid":"effbf949-0000-4000-8000-oraclevolcan","name":"Volcanic Mire","dir":"down","cents":4000}]}
+{"endpoint":"https://push.example.com/ep/bbb222","keys":{"p256dh":"p2","auth":"a2"},"rules":[{"oid":"7599c815-0000-4000-8000-oraclepactbo","name":"Pactbound Lich","dir":"up","cents":1100}]}
