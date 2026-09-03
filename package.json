@@ -9,7 +9,7 @@
     "seed": "node scripts/seed-mtgjson.mjs",
     "pack": "node scripts/build-pack.mjs",
     "alerts": "node scripts/send-ntfy.mjs",
-    "test": "node --test test/pipeline.test.mjs test/frontend.test.mjs",
+    "test": "node --test test/pipeline.test.mjs test/frontend.test.mjs test/bulk-url.test.mjs",
     "fixtures": "node fixtures/make-fixtures.mjs",
     "test:ui": "node test/ui.mjs",
     "dev": "node test/serve.mjs",

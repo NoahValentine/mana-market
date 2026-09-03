@@ -202,12 +202,29 @@ export async function resolveLocalFile(source, opts = {}) {
   return { path: source, isTemp: false, cleanup: async () => {} };
 }
 
+/** True when the file starts with the gzip magic number (1f 8b). */
+export function isGzipFile(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(2);
+    const read = fs.readSync(fd, head, 0, 2, 0);
+    return read === 2 && head[0] === 0x1f && head[1] === 0x8b;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already closed */ }
+  }
+}
+
 /**
- * Stream the top-level JSON array at `filePath` (gzip auto-detected by
- * `.gz` extension), calling `onCard(card)` synchronously per element.
+ * Stream the top-level JSON array at `filePath`, calling `onCard(card)`
+ * synchronously per element. Compression is detected from the file's own magic
+ * bytes rather than its name, so a URL with a query string or an unexpected
+ * extension still works.
  */
 export async function streamCardArray(filePath, onCard) {
-  const isGz = filePath.endsWith('.gz');
+  const isGz = isGzipFile(filePath) || String(filePath).endsWith('.gz');
   let src = fs.createReadStream(filePath);
   if (isGz) src = src.pipe(zlib.createGunzip());
   const pipeline = src.pipe(parser()).pipe(streamArray());
@@ -416,6 +433,42 @@ export async function resolveDefaultCardsBulk({
   }
   const body = await res.json();
   const obj = (body.data || []).find((d) => d.type === 'default_cards');
-  if (!obj) throw new Error('no default_cards object in bulk-data response');
-  return obj; // { download_uri, updated_at, ... }
+  if (!obj) {
+    const types = (body.data || []).map((d) => d.type).join(', ') || '(none)';
+    throw new Error(`no default_cards object in bulk-data response; types offered: ${types}`);
+  }
+  const url = pickDownloadUrl(obj);
+  if (!url) {
+    throw new Error(
+      'could not find a download URL on the default_cards bulk object. '
+      + `Fields present: ${Object.keys(obj).join(', ')}. `
+      + 'Scryfall may have renamed the field — see pickDownloadUrl().',
+    );
+  }
+  return { ...obj, download_uri: url };
+}
+
+/**
+ * Find the bulk file's URL without depending on one field name.
+ *
+ * Scryfall called it `download_uri` historically; a rename broke the nightly
+ * job once already, so identify it by shape: a string URL that is not the
+ * object's own API self-link. Named candidates are tried first, then any
+ * https URL pointing at the bulk file host, then any https URL ending in .json.
+ */
+export function pickDownloadUrl(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const named = ['download_uri', 'download_url', 'downloadUri', 'downloadUrl', 'file_uri', 'file_url'];
+  for (const key of named) {
+    const v = obj[key];
+    if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
+  }
+  const values = Object.entries(obj)
+    .filter(([key, v]) => typeof v === 'string' && /^https?:\/\//.test(v)
+      // `uri` is the object's own API endpoint, not the data file
+      && key !== 'uri' && !/^https?:\/\/api\.scryfall\.com\//.test(v));
+  const onDataHost = values.find(([, v]) => /^https?:\/\/data\.scryfall\.io\//.test(v));
+  if (onDataHost) return onDataHost[1];
+  const jsonFile = values.find(([, v]) => /\.json(\.gz)?(\?|$)/.test(v));
+  return jsonFile ? jsonFile[1] : null;
 }
