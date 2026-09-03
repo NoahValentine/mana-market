@@ -1,15 +1,17 @@
 // scripts/lib/scryfall.mjs
 //
-// Shared helpers for turning a Scryfall "default_cards" bulk-data JSON array
+// Shared helpers for turning a Scryfall "default_cards" bulk-data file
 // into a Mana Market snapshot: per-oracle-id cheapest/most-expensive paper
 // printing + finish, plus the derived fields cards.json needs (rarity,
 // color identity, type bitmask, reserved flag, oldest printing year, image
 // key, edhrec rank, collector number).
 //
-// Streaming: the bulk file is 500MB+ uncompressed. We never hold the whole
-// array in memory. Instead we stream it with `stream-json`'s StreamArray
-// parser and keep only small per-oracle-id aggregates (there are ~30k
-// oracle ids, each aggregate a few hundred bytes -> a few MB total).
+// Streaming: the bulk file is 500MB+ uncompressed and Scryfall serves it as
+// gzipped JSON Lines these days (it used to be one big JSON array, and both
+// shapes are still handled — see detectJsonShape). We never hold the whole
+// file in memory: records are streamed one at a time and only small
+// per-oracle-id aggregates are kept (~30k oracle ids, a few hundred bytes
+// each -> a few MB total).
 //
 // The "unless it is the only printing of that card" language exception
 // requires knowing, for every oracle_id, whether *any* otherwise-eligible
@@ -25,6 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
+import readline from 'node:readline';
 import { pipeline as streamPipeline } from 'node:stream/promises';
 import streamJsonPkg from 'stream-json';
 import streamArrayPkg from 'stream-json/streamers/StreamArray.js';
@@ -217,17 +220,49 @@ export function isGzipFile(filePath) {
   }
 }
 
+/** A readable stream of the file's decompressed bytes. */
+function openDecompressed(filePath) {
+  const raw = fs.createReadStream(filePath);
+  if (isGzipFile(filePath) || String(filePath).endsWith('.gz')) {
+    return raw.pipe(zlib.createGunzip());
+  }
+  return raw;
+}
+
 /**
- * Stream the top-level JSON array at `filePath`, calling `onCard(card)`
- * synchronously per element. Compression is detected from the file's own magic
- * bytes rather than its name, so a URL with a query string or an unexpected
- * extension still works.
+ * Which JSON shape the file holds: 'array' for one big `[ {...}, {...} ]`,
+ * 'lines' for JSON Lines (one object per line).
+ *
+ * Scryfall served bulk data as a JSON array for years and switched to
+ * `.jsonl.gz`, so the format is sniffed from the first non-whitespace
+ * character rather than assumed or read off the file name.
+ */
+export async function detectJsonShape(filePath) {
+  const stream = openDecompressed(filePath);
+  try {
+    for await (const chunk of stream) {
+      const text = chunk.toString('utf8');
+      for (const ch of text) {
+        if (/\s/.test(ch)) continue;
+        return ch === '[' ? 'array' : 'lines';
+      }
+    }
+  } finally {
+    stream.destroy();
+  }
+  throw new Error(`${filePath} is empty — nothing to parse`);
+}
+
+/**
+ * Stream every card in a Scryfall bulk file, calling `onCard(card)` per record.
+ * Handles both shapes (JSON array and JSON Lines) and both encodings (plain and
+ * gzip), detected from the content itself.
  */
 export async function streamCardArray(filePath, onCard) {
-  const isGz = isGzipFile(filePath) || String(filePath).endsWith('.gz');
-  let src = fs.createReadStream(filePath);
-  if (isGz) src = src.pipe(zlib.createGunzip());
-  const pipeline = src.pipe(parser()).pipe(streamArray());
+  const shape = await detectJsonShape(filePath);
+  if (shape === 'lines') return streamJsonLines(filePath, onCard);
+
+  const pipeline = openDecompressed(filePath).pipe(parser()).pipe(streamArray());
   await new Promise((resolve, reject) => {
     pipeline.on('data', ({ value }) => {
       try {
@@ -239,18 +274,42 @@ export async function streamCardArray(filePath, onCard) {
     pipeline.on('end', resolve);
     pipeline.on('error', reject);
   });
+  return undefined;
+}
+
+/** JSON Lines: one card per line, blank lines and CRLF tolerated. */
+async function streamJsonLines(filePath, onCard) {
+  const rl = readline.createInterface({
+    input: openDecompressed(filePath),
+    crlfDelay: Infinity,
+  });
+  let lineNo = 0;
+  try {
+    for await (const line of rl) {
+      lineNo += 1;
+      const trimmed = line.trim().replace(/,$/, '');
+      if (!trimmed || trimmed === '[' || trimmed === ']') continue;
+      let card;
+      try {
+        card = JSON.parse(trimmed);
+      } catch (err) {
+        throw new Error(`${filePath}: line ${lineNo} is not valid JSON (${err.message})`);
+      }
+      onCard(card);
+    }
+  } finally {
+    rl.close();
+  }
+  return undefined;
 }
 
 /**
- * Stream the object at top-level key `objectKey` (e.g. MTGJSON's `data`)
- * calling `onEntry(key, value)` synchronously per key/value pair, without
- * ever buffering the whole object. Gzip auto-detected by `.gz` extension.
+ * Stream the entries of one object inside a large JSON file (used by the
+ * MTGJSON seed, whose files are `{ "data": { "<uuid>": {...}, ... } }`).
+ * Compression is detected from the content, like everywhere else here.
  */
 export async function streamObjectEntries(filePath, objectKey, onEntry) {
-  const isGz = filePath.endsWith('.gz');
-  let src = fs.createReadStream(filePath);
-  if (isGz) src = src.pipe(zlib.createGunzip());
-  const pipeline = src
+  const pipeline = openDecompressed(filePath)
     .pipe(parser())
     .pipe(pick({ filter: objectKey }))
     .pipe(streamObject());
@@ -267,17 +326,6 @@ export async function streamObjectEntries(filePath, objectKey, onEntry) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Two-pass snapshot aggregation
-// ---------------------------------------------------------------------------
-
-/**
- * Snapshot row shape (superset of the cards.json fields; build-pack.mjs
- * picks the subset/order it needs).
- *
- * { oracleId, name, lo, loId, loF, loS, hi, hiId, hiF, hiS, np, r, cid, t,
- *   res, yr, img, cn, edh, setName (of loS, for trends.json "sets") }
- */
 export async function buildSnapshotFromBulk(source, opts = {}) {
   const { log = () => {} } = opts;
   const resolved = await resolveLocalFile(source, opts);

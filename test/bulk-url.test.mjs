@@ -58,3 +58,48 @@ test('compression is detected from the bytes, not the file name', async () => {
   }
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// Scryfall switched the bulk file from a JSON array to gzipped JSON Lines.
+// Both shapes must parse, whatever the file is called.
+test('streamCardArray reads a JSON array, JSON Lines, and gzipped variants', async () => {
+  const { detectJsonShape } = await import('../scripts/lib/scryfall.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mm-shape-'));
+  const cards = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }, { id: 3, name: 'C' }];
+
+  const files = {
+    'array.json': JSON.stringify(cards),
+    'array-pretty.json': JSON.stringify(cards, null, 2),
+    'lines.jsonl': `${cards.map((c) => JSON.stringify(c)).join('\n')}\n`,
+    // blank lines, CRLF and a stray trailing comma must not derail it
+    'lines-messy.jsonl': `\r\n${JSON.stringify(cards[0])},\r\n\r\n${JSON.stringify(cards[1])}\r\n${JSON.stringify(cards[2])}\r\n`,
+  };
+  for (const [name, body] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, name), body);
+    fs.writeFileSync(path.join(dir, `${name}.gz`), zlib.gzipSync(body));
+  }
+
+  assert.equal(await detectJsonShape(path.join(dir, 'array.json')), 'array');
+  assert.equal(await detectJsonShape(path.join(dir, 'array-pretty.json')), 'array');
+  assert.equal(await detectJsonShape(path.join(dir, 'lines.jsonl')), 'lines');
+  assert.equal(await detectJsonShape(path.join(dir, 'lines.jsonl.gz')), 'lines');
+
+  for (const name of Object.keys(files)) {
+    for (const file of [name, `${name}.gz`]) {
+      const seen = [];
+      await streamCardArray(path.join(dir, file), (c) => seen.push(c.name));
+      assert.deepEqual(seen, ['A', 'B', 'C'], `failed for ${file}`);
+    }
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a JSON Lines file with a broken line names the line number', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mm-bad-'));
+  const file = path.join(dir, 'bad.jsonl');
+  fs.writeFileSync(file, '{"name":"A"}\n{"name": oops}\n');
+  await assert.rejects(
+    () => streamCardArray(file, () => {}),
+    /line 2 is not valid JSON/,
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
