@@ -174,7 +174,7 @@ export function imageKey(card) {
 export async function downloadToTempFile(url, { userAgent, accept } = {}) {
   const res = await fetch(url, {
     headers: {
-      'User-Agent': userAgent || 'ManaMarket/1.0 (+https://github.com/)',
+      'User-Agent': userAgent || USER_AGENT,
       Accept: accept || '*/*',
     },
   });
@@ -391,15 +391,28 @@ export async function buildSnapshotFromBulk(source, opts = {}) {
 // Bulk-data API resolution (picks the `default_cards` object)
 // ---------------------------------------------------------------------------
 
+export const USER_AGENT = process.env.SCRYFALL_UA
+  || 'ManaMarket/1.0 (+https://github.com/NoahValentine/mana-market)';
+
 export async function resolveDefaultCardsBulk({
   bulkApiUrl = 'https://api.scryfall.com/bulk-data',
-  userAgent = 'ManaMarket/1.0 (+https://github.com/)',
+  userAgent = USER_AGENT,
 } = {}) {
   const res = await fetch(bulkApiUrl, {
-    headers: { 'User-Agent': userAgent, Accept: '*/*' },
+    headers: { 'User-Agent': userAgent, Accept: 'application/json;q=0.9,*/*;q=0.8' },
   });
   if (!res.ok) {
-    throw new Error(`bulk-data list failed: ${res.status} ${res.statusText}`);
+    // Say what Scryfall actually said — a bare status code is useless in CI.
+    let detail = '';
+    try {
+      const body = (await res.text()).slice(0, 400).replace(/\s+/g, ' ');
+      if (body) detail = ` — body: ${body}`;
+    } catch { /* no body */ }
+    const server = res.headers.get('server') || 'unknown';
+    throw new Error(
+      `bulk-data list failed: ${res.status} ${res.statusText} (server: ${server}, `
+      + `user-agent sent: ${userAgent})${detail}`,
+    );
   }
   const body = await res.json();
   const obj = (body.data || []).find((d) => d.type === 'default_cards');
