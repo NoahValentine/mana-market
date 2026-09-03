@@ -1,11 +1,28 @@
-name: Nightly prices
+name: Prices and deploy
 
-# Every night: pull today's prices from Scryfall's bulk file, rebuild the data
-# pack, commit the day's history, publish to GitHub Pages, push alerts.
+# One workflow does everything, so the deployed site always carries a freshly
+# built pack:
+#   * nightly on a schedule
+#   * whenever code is pushed
+#   * on demand from the Actions tab
+#
+# Steps: pull today's prices from Scryfall's bulk file, rebuild the data pack,
+# run the tests, commit the day's history CSV, publish to GitHub Pages, and
+# push phone alerts.
 
 on:
   schedule:
     - cron: '0 9 * * *' # 09:00 UTC
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'scripts/**'
+      - 'test/**'
+      - 'alerts.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -35,26 +52,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test
+        run: npm test
+
+      # Skipped when today's snapshot is already committed, so several pushes in
+      # one day do not re-download Scryfall's bulk file (about 500 MB).
       - name: Ingest today's Scryfall snapshot
-        run: npm run ingest
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          if [ -f "history/$today.csv" ]; then
+            echo "history/$today.csv already exists, skipping the download."
+          else
+            npm run ingest
+          fi
 
       - name: Build the data pack
         run: npm run pack
-
-      - name: Test
-        run: npm test
 
       - name: Prune history older than 400 days
         run: |
           cutoff=$(date -u -d '400 days ago' +%Y-%m-%d)
           for f in history/*.csv; do
+            [ -e "$f" ] || continue
             day=$(basename "$f" .csv)
             if [[ "$day" < "$cutoff" ]]; then git rm -q "$f"; fi
           done
 
-      # Only the daily CSVs are committed (~150 KB/day). The pack is rebuilt on
-      # every run and uploaded straight to Pages, so committing it would only
-      # bloat the repo.
+      # Only the daily CSVs are committed (~150 KB/day). The pack itself is
+      # rebuilt every run and uploaded straight to Pages: committing it would
+      # add megabytes a day for no benefit.
       - name: Commit history
         run: |
           git config user.name 'mana-market-bot'
@@ -79,8 +105,8 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
-      # Phone alerts via ntfy.sh. Missing config just means no alerts yet, which
-      # must not fail the price update.
+      # Phone alerts via ntfy.sh. No topic configured yet just means no alerts,
+      # which must never fail the price update.
       - name: Send alerts
         continue-on-error: true
         env:
